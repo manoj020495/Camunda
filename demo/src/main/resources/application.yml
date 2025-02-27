@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: camunda8-spring-example  # Name of your Spring Boot application
+
+server:
+  port: 9090  # Port for the Spring Boot application
+
+zeebe:
+  client:
+    broker:
+      gatewayAddress: 127.0.0.1:26500  # Zeebe broker address
+    security:
+      plaintext: true  # Disable encryption for local setup
+    job:
+      pollInterval: PT0.5S  # Polling interval for jobs (500ms)
+      timeout: PT5M  # Job timeout (5 minutes)
+    worker:
+      maxJobsActive: 32  # Maximum number of active jobs
+      threads: 1  # Number of worker threads
+      defaultName: demo-worker  # Default worker name
+      defaultType: demo-type  # Default worker type
+
+logging:
+  level:
+    root: INFO  # Default logging level for all packages
+    io.camunda.zeebe: DEBUG  # Debug logging for Camunda Zeebe
+    org.springframework: INFO  # Info logging for Spring Framework

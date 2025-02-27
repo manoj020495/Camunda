@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:zeebe="http://camunda.org/schema/zeebe/1.0" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:modeler="http://camunda.org/schema/modeler/1.0" id="Definitions_1peic0v" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="5.26.0" modeler:executionPlatform="Camunda Cloud" modeler:executionPlatformVersion="8.5.0">
+  <bpmn:process id="delete" name="delete" isExecutable="true">
+    <bpmn:startEvent id="Event_07zcmy9">
+      <bpmn:outgoing>Flow_1xu3pq3</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:endEvent id="Event_1xqgmb2">
+      <bpmn:incoming>Flow_09f38le</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:scriptTask id="Activity_0ox0sml" name="script">
+      <bpmn:extensionElements>
+        <zeebe:taskDefinition type="script-task-type" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_1xu3pq3</bpmn:incoming>
+      <bpmn:outgoing>Flow_09f38le</bpmn:outgoing>
+    </bpmn:scriptTask>
+    <bpmn:sequenceFlow id="Flow_1xu3pq3" sourceRef="Event_07zcmy9" targetRef="Activity_0ox0sml" />
+    <bpmn:sequenceFlow id="Flow_09f38le" sourceRef="Activity_0ox0sml" targetRef="Event_1xqgmb2" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="delete">
+      <bpmndi:BPMNShape id="BPMNShape_088lmwl" bpmnElement="Event_07zcmy9">
+        <dc:Bounds x="172" y="102" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1aqgidw_di" bpmnElement="Activity_0ox0sml">
+        <dc:Bounds x="270" y="80" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_1xqgmb2_di" bpmnElement="Event_1xqgmb2">
+        <dc:Bounds x="632" y="172" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1xu3pq3_di" bpmnElement="Flow_1xu3pq3">
+        <di:waypoint x="208" y="120" />
+        <di:waypoint x="270" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_09f38le_di" bpmnElement="Flow_09f38le">
+        <di:waypoint x="370" y="120" />
+        <di:waypoint x="501" y="120" />
+        <di:waypoint x="501" y="190" />
+        <di:waypoint x="632" y="190" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
