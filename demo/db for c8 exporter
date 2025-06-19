@@ -1,0 +1,38 @@
+CREATE TABLE user_task (
+    user_task_key         NUMBER PRIMARY KEY,
+    element_id            VARCHAR2(255),
+    name                  VARCHAR2(255),
+    process_definition_id VARCHAR2(255),
+    creation_date         TIMESTAMP WITH TIME ZONE,
+    completion_date       TIMESTAMP WITH TIME ZONE,
+    assignee              VARCHAR2(255),
+    state                 VARCHAR2(50),
+    form_key              NUMBER,
+    process_definition_key NUMBER,
+    process_instance_key  NUMBER,
+    element_instance_key  NUMBER,
+    tenant_id             VARCHAR2(255),
+    due_date              TIMESTAMP WITH TIME ZONE,
+    follow_up_date        TIMESTAMP WITH TIME ZONE,
+    candidate_groups      CLOB,
+    candidate_users       CLOB,
+    external_form_reference VARCHAR2(255),
+    process_definition_version NUMBER,
+    custom_headers        CLOB,
+    priority              NUMBER,
+    partition_id          NUMBER
+);
+
+CREATE TABLE process_instance (
+    process_instance_key     NUMBER PRIMARY KEY,
+    process_definition_id    VARCHAR2(255),
+    process_definition_key   NUMBER,
+    state                    VARCHAR2(50),
+    start_date               TIMESTAMP WITH TIME ZONE,
+    tenant_id                VARCHAR2(255),
+    parent_process_instance_key NUMBER,
+    parent_element_instance_key NUMBER,
+    version                  NUMBER,
+    partition_id             NUMBER,
+    tree_path                CLOB
+);
