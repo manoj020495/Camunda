@@ -1,0 +1,10 @@
+[exporters.rdbms]
+className = "io.camunda.exporter.rdbms.RdbmsExporter"
+jarPath = "lib/your-rdbms-exporter.jar"
+
+  [exporters.rdbms.args]
+  jdbcUrl = "jdbc:oracle:thin:@//localhost:1521/XEPDB1"
+  jdbcUser = "your_db_user"
+  jdbcPassword = "your_password"
+  batchSize = 100
+  flushIntervalMs = 1000
