@@ -1,0 +1,11 @@
+zeebe:
+  broker:
+    exporters:
+      rdbms:
+        className: io.camunda.zeebe.exporter.RdbmsExporter
+        args:
+          url: "jdbc:oracle:thin:@//your-oracle-host:1521/your-service"
+          user: "your_username"
+          password: "your_password"
+          driver: "oracle.jdbc.OracleDriver"
+          tablePrefix: "ZEEBE_"
