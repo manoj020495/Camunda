@@ -1,21 +1,24 @@
--- Create table for process instances
-CREATE TABLE ZB_PROCESS_INSTANCE (
-  ID VARCHAR2(255) PRIMARY KEY,
-  PROCESS_DEFINITION_KEY NUMBER,
-  BPMN_PROCESS_ID VARCHAR2(255),
-  VERSION NUMBER,
-  STATE VARCHAR2(50),
-  START_TIME TIMESTAMP,
-  END_TIME TIMESTAMP
-);
-
--- Create table for jobs (tasks, timers, etc)
-CREATE TABLE ZB_JOB (
-  KEY NUMBER PRIMARY KEY,
-  TYPE VARCHAR2(255),
-  PROCESS_INSTANCE_KEY NUMBER,
-  STATE VARCHAR2(50),
-  WORKER VARCHAR2(255),
-  RETRIES NUMBER,
-  DEADLINE TIMESTAMP
+CREATE TABLE user_task (
+  userTaskKey NUMBER(19) PRIMARY KEY,
+  elementId VARCHAR2(255),
+  name VARCHAR2(255),
+  processDefinitionId VARCHAR2(255),
+  creationDate TIMESTAMP WITH TIME ZONE,
+  completionDate TIMESTAMP WITH TIME ZONE,
+  assignee VARCHAR2(255),
+  state VARCHAR2(50),
+  formKey NUMBER(19),
+  processDefinitionKey NUMBER(19),
+  processInstanceKey NUMBER(19),
+  elementInstanceKey NUMBER(19),
+  tenantId VARCHAR2(255),
+  dueDate TIMESTAMP WITH TIME ZONE,
+  followUpDate TIMESTAMP WITH TIME ZONE,
+  candidateGroups CLOB,
+  candidateUsers CLOB,
+  externalFormReference VARCHAR2(4000),
+  processDefinitionVersion NUMBER(10),
+  customHeaders CLOB,
+  priority NUMBER(10),
+  partitionId NUMBER(10)
 );
