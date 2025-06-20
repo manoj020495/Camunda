@@ -2,10 +2,13 @@ zeebe:
   broker:
     exporters:
       rdbms:
-        className: io.camunda.zeebe.exporter.RdbmsExporter
+        className: io.camunda.zeebe.exporter.rdbms.RdbmsExporter
+        jarPath: lib/rdbms-exporter-8.x.x.jar   # CHANGE TO YOUR ACTUAL JAR FILENAME
         args:
           url: "jdbc:oracle:thin:@//your-oracle-host:1521/your-service"
-          user: "your_username"
-          password: "your_password"
+          username: "your-oracle-username"
+          password: "your-oracle-password"
           driver: "oracle.jdbc.OracleDriver"
-          tablePrefix: "ZEEBE_"
+          tables:
+            process_instances: "process_instance"
+            user_tasks: "user_task"
