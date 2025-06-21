@@ -1,0 +1,5 @@
+public class UserTaskExporterHelper {
+    public static void handle(Record<?> record, Connection connection) {
+        // Your existing insert/update logic
+    }
+}
