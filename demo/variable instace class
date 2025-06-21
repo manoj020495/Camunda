@@ -1,0 +1,35 @@
+package io.camunda.exporter.rdbms;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.Timestamp;
+import java.util.Date;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import io.camunda.zeebe.protocol.record.Record;
+import io.camunda.zeebe.protocol.record.value.VariableRecordValue;
+
+public class VariableInstanceValue {
+
+    private String name;
+    private String value;
+    private String scopeKey;
+
+    public void save(Record<?> record, Connection conn) {
+        try {
+            VariableRecordValue valueRecord = (VariableRecordValue) record.getValue();
+
+            String sql = "INSERT INTO variables (name, value, scope_key, created_timestamp) VALUES (?, ?, ?, ?)";
+            PreparedStatement stmt = conn.prepareStatement(sql);
+
+            stmt.setString(1, valueRecord.getName());
+            stmt.setString(2, valueRecord.getValue());
+            stmt.setString(3, String.valueOf(valueRecord.getScopeKey()));
+            stmt.setTimestamp(4, new Timestamp(new Date().getTime()));
+
+            stmt.executeUpdate();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+}
