@@ -1,0 +1,17 @@
+CREATE TABLE PROCESS_INSTANCE_MERGED (
+    PROCESS_INSTANCE_KEY         NUMBER PRIMARY KEY,
+    PROCESS_DEFINITION_ID        VARCHAR2(255),
+    STATE                        VARCHAR2(50),
+    START_TIME                   TIMESTAMP,
+    END_TIME                     TIMESTAMP
+);
+
+
+CREATE TABLE USER_TASK_MERGED (
+    ELEMENT_INSTANCE_KEY         NUMBER PRIMARY KEY,
+    PROCESS_INSTANCE_KEY         NUMBER,
+    STATE                        VARCHAR2(50),
+    ASSIGNEE                     VARCHAR2(255),
+    START_TIME                   TIMESTAMP,
+    COMPLETE_TIME                TIMESTAMP
+);
