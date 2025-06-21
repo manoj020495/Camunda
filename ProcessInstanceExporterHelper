@@ -1,0 +1,5 @@
+public class ProcessInstanceExporterHelper {
+    public static void handle(Record<?> record, Connection connection) {
+        // Your existing insert/update logic
+    }
+}
