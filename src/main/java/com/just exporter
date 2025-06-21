@@ -1,0 +1,32 @@
+public class OracleExporter implements Exporter {
+    protected Connection connection;
+
+    @Override
+    public void configure(Context context) {
+        try {
+            String url = "jdbc:oracle:thin:@localhost:1521:XE"; // 🔧 DB URL
+            String user = "your_user";                           // 🔧 DB username
+            String password = "your_password";                   // 🔧 DB password
+
+            connection = DriverManager.getConnection(url, user, password);
+            connection.setAutoCommit(true);
+        } catch (SQLException e) {
+            throw new RuntimeException("Oracle DB connection failed", e);
+        }
+    }
+
+    @Override
+    public void close() {
+        try {
+            if (connection != null) connection.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    public void export(Record<?> record) {
+        // Keep empty or throw new UnsupportedOperationException
+        throw new UnsupportedOperationException("This base class should be extended.");
+    }
+}
