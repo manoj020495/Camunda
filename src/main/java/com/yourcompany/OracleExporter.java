@@ -52,7 +52,7 @@ public class OracleExporter implements Exporter {
                 e.printStackTrace();
             }
         }
-        else if (record.getValue() instanceof UserTaskRecordValue userTask) {
+      else if (record.getValue() instanceof UserTaskRecordValue userTask) {
     try (PreparedStatement stmt = connection.prepareStatement(
             "MERGE INTO USER_TASK tgt USING (SELECT ? AS USER_TASK_KEY FROM dual) src " +
             "ON (tgt.USER_TASK_KEY = src.USER_TASK_KEY) " +
@@ -71,12 +71,15 @@ public class OracleExporter implements Exporter {
             "    CUSTOM_HEADERS, PRIORITY, PARTITION_ID) " +
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")) {
 
-        stmt.setLong(1, record.getKey()); // USER_TASK_KEY
+        // 1. USING subquery
+        stmt.setLong(1, record.getKey());
+
+        // 2–22. UPDATE clause bindings
         stmt.setString(2, userTask.getElementId());
         stmt.setString(3, userTask.getName());
         stmt.setString(4, userTask.getBpmnProcessId());
         stmt.setTimestamp(5, new Timestamp(record.getTimestamp())); // CREATION_DATE
-        stmt.setTimestamp(6, null); // COMPLETION_DATE (can set on COMPLETED intent)
+        stmt.setTimestamp(6, null); // COMPLETION_DATE – update later on complete
         stmt.setString(7, record.getIntent().name()); // STATE
         stmt.setString(8, userTask.getAssignee());
         stmt.setString(9, userTask.getFormKey());
@@ -94,8 +97,8 @@ public class OracleExporter implements Exporter {
         stmt.setInt(21, userTask.getPriority());
         stmt.setInt(22, record.getPartitionId());
 
-        // Bind again for insert part
-        stmt.setLong(23, record.getKey()); // USER_TASK_KEY
+        // 23–44. INSERT clause bindings
+        stmt.setLong(23, record.getKey());
         stmt.setString(24, userTask.getElementId());
         stmt.setString(25, userTask.getName());
         stmt.setString(26, userTask.getBpmnProcessId());
@@ -123,6 +126,7 @@ public class OracleExporter implements Exporter {
         e.printStackTrace();
     }
 }
+
     }
 
     @Override
