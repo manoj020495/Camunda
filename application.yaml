@@ -1,0 +1,4 @@
+exporters:
+  customExporter:
+    className: org.bcf.OracleUnifiedExporter
+    jarPath: C:/path/to/your/OracleExporter-1.0-SNAPSHOT.jar
