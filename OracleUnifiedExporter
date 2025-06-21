@@ -1,0 +1,26 @@
+public class OracleUnifiedExporter implements Exporter {
+    private Connection connection;
+
+    @Override
+    public void configure(Context context) {
+        try {
+            connection = OracleExporter.getConnection();
+        } catch (SQLException e) {
+            throw new RuntimeException("Oracle DB connection failed", e);
+        }
+    }
+
+    @Override
+    public void export(Record<?> record) {
+        if (record.getValueType() == ValueType.PROCESS_INSTANCE) {
+            ProcessInstanceExporterHelper.handle(record, connection);
+        } else if (record.getValueType() == ValueType.USER_TASK) {
+            UserTaskExporterHelper.handle(record, connection);
+        }
+    }
+
+    @Override
+    public void close() {
+        OracleExporter.closeConnection();
+    }
+}
