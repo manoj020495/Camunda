@@ -1,0 +1,75 @@
+String sql = """
+MERGE INTO USER_TASK_RECORD t
+USING (SELECT ? AS ID FROM dual) s
+ON (t.ID = s.ID)
+WHEN MATCHED THEN
+  UPDATE SET
+    ELEMENT_ID = ?, NAME = ?, PROCESS_DEFINITION_ID = ?, CREATION_DATE = ?, 
+    COMPLETION_DATE = ?, STATE = ?, ASSIGNEE = ?, FORM_KEY = ?, 
+    PROCESS_DEFINITION_KEY = ?, ELEMENT_INSTANCE_KEY = ?, TENANT_ID = ?, 
+    DUE_DATE = ?, FOLLOW_UP_DATE = ?, CANDIDATE_GROUPS = ?, 
+    CANDIDATE_USERS = ?, EXTERNAL_FOR_REFERENCE = ?, PROCESS_DEFINITION_VERSION = ?, 
+    CUSTOM_HEADERS = ?, PRIORITY = ?, PARTITION_ID = ?
+WHEN NOT MATCHED THEN
+  INSERT (
+    ID, ELEMENT_ID, NAME, PROCESS_DEFINITION_ID, CREATION_DATE, COMPLETION_DATE, STATE, 
+    ASSIGNEE, FORM_KEY, PROCESS_DEFINITION_KEY, ELEMENT_INSTANCE_KEY, TENANT_ID, 
+    DUE_DATE, FOLLOW_UP_DATE, CANDIDATE_GROUPS, CANDIDATE_USERS, EXTERNAL_FOR_REFERENCE, 
+    PROCESS_DEFINITION_VERSION, CUSTOM_HEADERS, PRIORITY, PARTITION_ID
+  )
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+""";
+
+PreparedStatement stmt = connection.prepareStatement(sql);
+
+int i = 1;
+
+// USING clause
+stmt.setLong(i++, userTask.getKey());
+
+// UPDATE SET clause
+stmt.setString(i++, userTask.getElementId());
+stmt.setString(i++, userTask.getName());
+stmt.setString(i++, userTask.getProcessDefinitionId());
+stmt.setTimestamp(i++, new Timestamp(record.getTimestamp()));
+stmt.setTimestamp(i++, "COMPLETED".equals(record.getIntent().name()) ? new Timestamp(record.getTimestamp()) : null);
+stmt.setString(i++, record.getIntent().name());
+stmt.setString(i++, userTask.getAssignee());
+stmt.setString(i++, userTask.getFormKey());
+stmt.setLong(i++, userTask.getProcessDefinitionKey());
+stmt.setLong(i++, userTask.getElementInstanceKey());
+stmt.setString(i++, userTask.getTenantId());
+stmt.setTimestamp(i++, null); // due_date
+stmt.setTimestamp(i++, null); // follow_up_date
+stmt.setString(i++, userTask.getCandidateGroupsList().toString());
+stmt.setString(i++, userTask.getCandidateUsersList().toString());
+stmt.setString(i++, userTask.getExternalFormReference());
+stmt.setInt(i++, userTask.getProcessDefinitionVersion());
+stmt.setString(i++, userTask.getCustomHeaders().toString());
+stmt.setInt(i++, userTask.getPriority());
+stmt.setInt(i++, record.getPartitionId());
+
+// INSERT VALUES clause
+stmt.setLong(i++, userTask.getKey());
+stmt.setString(i++, userTask.getElementId());
+stmt.setString(i++, userTask.getName());
+stmt.setString(i++, userTask.getProcessDefinitionId());
+stmt.setTimestamp(i++, new Timestamp(record.getTimestamp()));
+stmt.setTimestamp(i++, "COMPLETED".equals(record.getIntent().name()) ? new Timestamp(record.getTimestamp()) : null);
+stmt.setString(i++, record.getIntent().name());
+stmt.setString(i++, userTask.getAssignee());
+stmt.setString(i++, userTask.getFormKey());
+stmt.setLong(i++, userTask.getProcessDefinitionKey());
+stmt.setLong(i++, userTask.getElementInstanceKey());
+stmt.setString(i++, userTask.getTenantId());
+stmt.setTimestamp(i++, null); // due_date
+stmt.setTimestamp(i++, null); // follow_up_date
+stmt.setString(i++, userTask.getCandidateGroupsList().toString());
+stmt.setString(i++, userTask.getCandidateUsersList().toString());
+stmt.setString(i++, userTask.getExternalFormReference());
+stmt.setInt(i++, userTask.getProcessDefinitionVersion());
+stmt.setString(i++, userTask.getCustomHeaders().toString());
+stmt.setInt(i++, userTask.getPriority());
+stmt.setInt(i++, record.getPartitionId());
+
+stmt.executeUpdate();
