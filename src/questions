@@ -1,0 +1,85 @@
+Does the official RDBMS Exporter support retry mechanisms?
+ 
+ 
+If a DB insert fails (e.g., due to a connection error), will the exporter retry later, or is the event lost permanently?
+Are there configuration options for retry count, backoff time, etc.?
+ 
+
+ 
+ 
+2. 📜 
+Who is responsible for table creation?
+ 
+ 
+Does the official RDBMS exporter automatically create required tables when connected to the database?
+Or are users expected to create the schema manually?
+If so, is there a reference .sql script or DDL available from Camunda for this exporter?
+ 
+
+ 
+ 
+3. 🔐 
+Where and how are DB credentials configured?
+ 
+ 
+Is there a standard way to pass DB connection properties like URL, username, and password (e.g., in application.yaml, environment variables, or another config file)?
+How are secure connections (e.g., SSL) supported for DB?
+ 
+
+ 
+ 
+4. 📦 
+What are the supported record types and events in the official RDBMS exporter?
+ 
+ 
+Does it capture only UserTaskRecordValue, or does it also store process lifecycle events (ProcessInstanceRecordValue, VariableRecordValue, etc.)?
+Any mapping reference for what tables each record type maps to?
+ 
+
+ 
+ 
+5. 🚨 
+What happens on exporter crash?
+ 
+ 
+If the exporter crashes or throws an exception, what is the recovery mechanism?
+Will missed events be picked up after broker restart?
+ 
+
+ 
+ 
+6. 🧪 
+How to test the exporter standalone?
+ 
+ 
+Is there any support or approach for local/standalone testing of the exporter without restarting the whole broker every time?
+Can we simulate the broker input to the exporter manually?
+ 
+
+ 
+ 
+7. ⚠️ 
+Are there any known limitations or risks?
+ 
+ 
+Any caveats like memory overhead, DB locking issues, duplicate entries, or ordering problems?
+How does it scale under high-throughput scenarios?
+ 
+
+ 
+ 
+8. 🛠️ 
+Is batching supported in the exporter?
+ 
+ 
+Can we configure the exporter to batch insert operations into the DB for better performance?
+ 
+
+ 
+ 
+9. 🧩 
+Is there integration with Camunda Operate or Optimize?
+ 
+ 
+If we use the RDBMS exporter, will it affect Camunda Operate/Optimize or work alongside them?
+ 
