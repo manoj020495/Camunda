@@ -42,3 +42,19 @@ public class RetryExecutor {
         LOG.error("Operation {} failed after {} retries", operationName, MAX_RETRIES);
     }
 }
+=========================================================================================
+
+public void handleUserTask(Connection connection, Record<?> record, UserTaskRecordValue userTask) {
+    RetryExecutor.executeWithRetry(() -> {
+        String sql = "..."; // your MERGE statement
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            int i = 1;
+            stmt.setLong(i++, record.getKey());
+            stmt.setString(i++, userTask.getAssignee());
+            // other fields...
+            stmt.executeUpdate();
+        } catch (SQLException e) {
+            throw new RuntimeException("DB failure in handleUserTask", e);
+        }
+    }, "handleUserTask");
+}
