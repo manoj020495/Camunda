@@ -1,53 +1,44 @@
-zeebe-record_process-instance_*
-Column Name	Type	Description
-bpmn_process_id	VARCHAR	ID of the BPMN process (e.g., "invoice_process")
-version	INT	Deployed version of the process
-process_definition_key	BIGINT	Unique key of the process definition
-process_instance_key	BIGINT	Unique key of the process instance (main business identifier)
-element_id	VARCHAR	ID of the BPMN element currently being processed
-flow_scope_key	BIGINT	Scope key this element belongs to
-bpmn_element_type	VARCHAR	Type of BPMN element (e.g., "START_EVENT", "SERVICE_TASK")
-bpmn_event_type	VARCHAR	Type of BPMN event (if applicable)
-parent_process_instance_key	BIGINT	Parent instance key (for called subprocesses)
-parent_element_instance_key	BIGINT	The element key from which this process was spawned
-tenant_id	VARCHAR	Multi-tenancy support
-element_instance_path	TEXT or JSON	Path structure for element instance (disabled in mapping)
-process_definition_path	TEXT or JSON	Path structure for the process definition (disabled in mapping)
-calling_element_path	TEXT or JSON	Path for the calling element (disabled in mapping)
+package com.bcf.util;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-zeebe-record_user-task_*
-Column Name	SQL Type	Description
-		
-user_task_key	BIGINT	Unique key of the user task
-assignee	VARCHAR	Assigned user (if any)
-candidate_groups_list	TEXT	Candidate groups (comma or JSON separated)
-candidate_users_list	TEXT	Candidate users (comma or JSON separated)
-changed_attributes	TEXT	Modified fields, if any
-due_date	VARCHAR	Due date (can be changed to TIMESTAMP)
-follow_up_date	VARCHAR	Follow-up date
-form_key	BIGINT	Internal form key
-action	TEXT	Action taken (e.g., assign, claim)
-external_form_reference	VARCHAR	Reference to external form
-creation_timestamp	BIGINT	Epoch timestamp of creation
-element_id	VARCHAR	BPMN element ID
-element_instance_key	BIGINT	Key of the element instance
-bpmn_process_id	VARCHAR	BPMN process ID
-process_definition_version	INTEGER	Version of the process definition
-process_instance_key	BIGINT	Key of the process instance
-process_definition_key	BIGINT	Process definition key
-tenant_id	VARCHAR	Tenant ID
-priority	INTEGER	Task priority
-denied_reason	TEXT	Reason if the task was denied
+import java.sql.SQLException;
 
+public class RetryExecutor {
 
-zeebe-record_variable_*
-Column Name	SQL Type	Description
-name	VARCHAR	Name of the process variable
-value	VARCHAR(8191) or TEXT	Value of the variable (size based on expected content)
-scope_key	BIGINT	Scope within which the variable is defined
-process_instance_key	BIGINT	Key of the process instance
-process_definition_key	BIGINT	Key of the process definition
-bpmn_process_id	VARCHAR	BPMN process ID
-tenant_id	VARCHAR	Tenant ID
+    private static final Logger LOG = LoggerFactory.getLogger(RetryExecutor.class);
+    private static final int MAX_RETRIES = 5;
+    private static final long RETRY_DELAY_MS = 5000;
 
+    public static void executeWithRetry(Runnable operation, String operationName) {
+        int attempt = 0;
+        while (attempt < MAX_RETRIES) {
+            try {
+                operation.run();
+                return;
+            } catch (RuntimeException e) {
+                Throwable cause = e.getCause();
+                if (cause instanceof SQLException sqlEx) {
+                    String msg = sqlEx.getMessage();
+                    // Skip retry for known bad SQL/data issues
+                    if (msg.contains("ORA-") || msg.contains("invalid number") || msg.contains("constraint")) {
+                        LOG.error("Non-retriable error in {}: {}", operationName, msg);
+                        return; // skip retry
+                    }
+                }
+
+                attempt++;
+                LOG.warn("Retrying {} (attempt {}/{}): {}", operationName, attempt, MAX_RETRIES, e.getMessage());
+                try {
+                    Thread.sleep(RETRY_DELAY_MS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    LOG.error("Retry interrupted for {}", operationName);
+                    return;
+                }
+            }
+        }
+        LOG.error("Operation {} failed after {} retries", operationName, MAX_RETRIES);
+    }
+}
