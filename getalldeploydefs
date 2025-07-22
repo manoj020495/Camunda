@@ -1,0 +1,38 @@
+package com.baml.cogniflow.c8.process.service;
+
+import io.camunda.zeebe.client.ZeebeClient;
+import io.camunda.zeebe.client.api.response.Process;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import com.baml.cogniflow.c8.process.domain.ProcessDefinitionDTO;
+
+import java.util.List;
+import java.util.stream.Collectors;
+
+@Service
+@RequiredArgsConstructor
+@Slf4j
+public class ProcessDefinitionService {
+
+private final ZeebeClient zeebeClient;
+
+public List<ProcessDefinitionDTO> getAllProcessDefinitions() {
+log.info("Fetching deployed process definitions from Zeebe");
+
+List<Process> deployedProcesses = zeebeClient.newDeployResourceCommand()
+.send()
+.join()
+.getProcesses();
+
+return deployedProcesses.stream()
+.map(process -> {
+ProcessDefinitionDTO dto = new ProcessDefinitionDTO();
+dto.setProcessDefinitionKey(String.valueOf(process.getProcessDefinitionKey()));
+dto.setProcessDefinitionName(process.getBpmnProcessId());
+dto.setProcessDefinitionVersion(process.getVersion());
+return dto;
+})
+.collect(Collectors.toList());
+}
+}
