@@ -1,0 +1,28 @@
+<build>
+<plugins>
+<plugin>
+<groupId>org.apache.maven.plugins</groupId>
+<artifactId>maven-shade-plugin</artifactId>
+<version>3.4.1</version>
+<executions>
+<execution>
+<phase>package</phase>
+<goals><goal>shade</goal></goals>
+<configuration>
+<createDependencyReducedPom>false</createDependencyReducedPom>
+<artifactSet>
+<includes>
+<include>com.oracle.database.jdbc:ojdbc8</include>
+</includes>
+</artifactSet>
+<transformers>
+<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+<mainClass>com.baml.bacf.exporter.ExporterApplication</mainClass> <!-- replace with your main class -->
+</transformer>
+</transformers>
+</configuration>
+</execution>
+</executions>
+</plugin>
+</plugins>
+</build>
