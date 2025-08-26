@@ -1,0 +1,51 @@
+private void backfillTaskKeyIntoVars(Connection c, long elementInstanceKey, long userTaskKey) throws SQLException {
+try (PreparedStatement ps = c.prepareStatement(
+"UPDATE CAMUNDA_USER_TASK_VARIABLE " +
+" SET TASK_INSTANCE_KEY = ? " +
+" WHERE SCOPE_KEY = ? AND TASK_INSTANCE_KEY IS NULL")) {
+ps.setLong(1, userTaskKey);
+ps.setLong(2, elementInstanceKey);
+ps.executeUpdate();
+}
+}
+ 
+long userTaskKey = getUserTaskKey(connection, variableRecord.getScopeKey());
+
+String sql =
+"MERGE INTO CAMUNDA_USER_TASK_VARIABLE t " +
+"USING (SELECT ? AS NAME, ? AS SCOPE_KEY FROM dual) s " +
+" ON (t.NAME = s.NAME AND t.SCOPE_KEY = s.SCOPE_KEY) " +
+"WHEN MATCHED THEN " +
+" UPDATE SET VALUE=?, TASK_INSTANCE_KEY=?, PROCESS_INSTANCE_KEY=?, " +
+" PROCESS_DEFINITION_KEY=?, BPMN_PROCESS_ID=?, TENANT_ID=? " +
+"WHEN NOT MATCHED THEN " +
+" INSERT (NAME, VALUE, SCOPE_KEY, TASK_INSTANCE_KEY, PROCESS_INSTANCE_KEY, " +
+" PROCESS_DEFINITION_KEY, BPMN_PROCESS_ID, TENANT_ID) " +
+" VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
+
+try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+int i = 1;
+// USING
+stmt.setString(i++, variableRecord.getName());
+stmt.setLong (i++, variableRecord.getScopeKey());
+
+// UPDATE
+stmt.setString(i++, variableRecord.getValue());
+stmt.setObject(i++, (userTaskKey == -1 ? null : userTaskKey), java.sql.Types.NUMERIC);
+stmt.setLong (i++, variableRecord.getProcessInstanceKey());
+stmt.setLong (i++, variableRecord.getProcessDefinitionKey());
+stmt.setString(i++, variableRecord.getBpmnProcessId());
+stmt.setString(i++, variableRecord.getTenantId());
+
+// INSERT
+stmt.setString(i++, variableRecord.getName());
+stmt.setString(i++, variableRecord.getValue());
+stmt.setLong (i++, variableRecord.getScopeKey());
+stmt.setObject(i++, (userTaskKey == -1 ? null : userTaskKey), java.sql.Types.NUMERIC);
+stmt.setLong (i++, variableRecord.getProcessInstanceKey());
+stmt.setLong (i++, variableRecord.getProcessDefinitionKey());
+stmt.setString(i++, variableRecord.getBpmnProcessId());
+stmt.setString(i++, variableRecord.getTenantId());
+
+stmt.executeUpdate();
+}
