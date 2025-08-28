@@ -1,96 +1,71 @@
-public class ProcessAuditHandler {
+public void handleProcessAudit(Connection connection, Record<?> eventRecord, ProcessInstanceRecordValue processInstance) {
+    final String sql = "INSERT INTO CAMUNDA_PROCESS_AUDIT (RECORD_KEY, BPMN_PROCESS_ID, VERSION, PROCESS_DEFINITION_KEY, "
+                     + "PROCESS_INSTANCE_KEY, ELEMENT_ID, FLOW_SCOPE_KEY, BPMN_ELEMENT_TYPE, BPMN_EVENT_TYPE, "
+                     + "PARENT_PROCESS_INSTANCE_KEY, PARENT_ELEMENT_INSTANCE_KEY, INCIDENT_OCCURRED, TENANT_ID) "
+                     + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                     + "ON CONFLICT (RECORD_KEY) DO UPDATE SET "
+                     + "BPMN_PROCESS_ID=?, VERSION=?, PROCESS_DEFINITION_KEY=?, PROCESS_INSTANCE_KEY=?, ELEMENT_ID=?, "
+                     + "FLOW_SCOPE_KEY=?, BPMN_ELEMENT_TYPE=?, BPMN_EVENT_TYPE=?, "
+                     + "PARENT_PROCESS_INSTANCE_KEY=?, PARENT_ELEMENT_INSTANCE_KEY=?, INCIDENT_OCCURRED=?, TENANT_ID=?";
 
-    public void handleProcessAudit(Connection connection, Record<?> eventRecord, ProcessInstanceRecordValue processInstance) throws DatabaseConnectionException {
-        log.debug("ProcessAuditHandler: ProcessInstanceHandler Value: {}", eventRecord.getValue().toString());
+    int incidentFlag = 0;
+    String intent = eventRecord.getIntent().name();
+    String valueType = eventRecord.getValueType().name();
 
-        // MERGE statement to insert or update audit table
-        String sql = """
-            MERGE INTO CAMUNDA_PROCESS_AUDIT t
-            USING (SELECT ? AS PROCESS_RECORD_ID FROM dual) s
-            ON (t.PROCESS_RECORD_ID = s.PROCESS_RECORD_ID)
-            WHEN MATCHED THEN
-              UPDATE SET 
-                BPMN_PROCESS_ID = ?, VERSION = ?, PROCESS_DEFINITION_KEY = ?, PROCESS_INSTANCE_KEY = ?, 
-                ELEMENT_ID = ?, FLOW_SCOPE_KEY = ?, BPMN_ELEMENT_TYPE = ?, BPMN_EVENT_TYPE = ?, 
-                PARENT_PROCESS_INSTANCE_KEY = ?, PARENT_ELEMENT_INSTANCE_KEY = ?, TENANT_ID = ?, 
-                INCIDENT_OCCURRED = ?
-            WHEN NOT MATCHED THEN
-              INSERT (
-                PROCESS_RECORD_ID, BPMN_PROCESS_ID, VERSION, PROCESS_DEFINITION_KEY, PROCESS_INSTANCE_KEY, 
-                ELEMENT_ID, FLOW_SCOPE_KEY, BPMN_ELEMENT_TYPE, BPMN_EVENT_TYPE, 
-                PARENT_PROCESS_INSTANCE_KEY, PARENT_ELEMENT_INSTANCE_KEY, TENANT_ID, 
-                INCIDENT_OCCURRED
-              )
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """;
+    log.info("Processing record key={} with intent={} and valueType={}", eventRecord.getKey(), intent, valueType);
 
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            log.debug("ProcessAuditHandler: Preparing SQL statement for record key: {}", eventRecord.getKey());
-            int i = 1;
-
-            // Using clause
-            stmt.setLong(i++, eventRecord.getKey());
-
-            // Update clause values
-            stmt.setString(i++, processInstance.getBpmnProcessId());
-            stmt.setInt(i++, processInstance.getVersion());
-            stmt.setLong(i++, processInstance.getProcessDefinitionKey());
-            stmt.setLong(i++, processInstance.getProcessInstanceKey());
-            stmt.setString(i++, processInstance.getElementId());
-            stmt.setLong(i++, processInstance.getFlowScopeKey());
-            stmt.setString(i++, String.valueOf(processInstance.getBpmnElementType()));
-            stmt.setString(i++, String.valueOf(processInstance.getBpmnEventType()));
-            stmt.setLong(i++, processInstance.getParentProcessInstanceKey());
-            stmt.setLong(i++, processInstance.getParentElementInstanceKey());
-            stmt.setString(i++, processInstance.getTenantId());
-
-            // Incident detection logic (for UPDATE clause)
-            int incidentFlag = (eventRecord.getIntent().name().equals("FAILED")
-                                && eventRecord.getValueType().name().equals("JOB")
-                                && eventRecord.getValue().get("retries") != null
-                                && ((Number) eventRecord.getValue().get("retries")).intValue() == 0) ? 1 : 0;
-            stmt.setInt(i++, incidentFlag);
-
-            // Insert clause values
-            stmt.setLong(i++, eventRecord.getKey());
-            stmt.setString(i++, processInstance.getBpmnProcessId());
-            stmt.setInt(i++, processInstance.getVersion());
-            stmt.setLong(i++, processInstance.getProcessDefinitionKey());
-            stmt.setLong(i++, processInstance.getProcessInstanceKey());
-            stmt.setString(i++, processInstance.getElementId());
-            stmt.setLong(i++, processInstance.getFlowScopeKey());
-            stmt.setString(i++, String.valueOf(processInstance.getBpmnElementType()));
-            stmt.setString(i++, String.valueOf(processInstance.getBpmnEventType()));
-            stmt.setLong(i++, processInstance.getParentProcessInstanceKey());
-            stmt.setLong(i++, processInstance.getParentElementInstanceKey());
-            stmt.setString(i++, processInstance.getTenantId());
-            stmt.setInt(i++, incidentFlag); // For INSERT
-
-            // Skip invalid process instances (e.g., empty or null fields)
-            if (!isValidProcessInstance(processInstance)) {
-                log.warn("ProcessAuditHandler: Skipping invalid process instance with record key: {}", eventRecord.getKey());
-                return;
-            }
-
-            int rowsAffected = stmt.executeUpdate();
-            if (rowsAffected > 0) {
-                log.info("ProcessAuditHandler: SQL statement executed successfully for record key: {}", eventRecord.getKey());
-            } else {
-                log.info("ProcessAuditHandler: No rows affected for record key: {}", eventRecord.getKey());
-            }
-        } catch (SQLException e) {
-            log.error("ProcessAuditHandler: Error executing SQL statement for record key: {}, value: {}, Error: {}",
-                eventRecord.getKey(), eventRecord.getValue(), e.getMessage());
-            throw new DatabaseConnectionException("Error writing to CAMUNDA_PROCESS_AUDIT", e);
-        }
-
-        log.info("ProcessAuditHandler: Finished processing record key: {}", eventRecord.getKey());
+    // Incident logic: only applicable for JOB or INCIDENT value types
+    if (("JOB".equals(valueType) || "INCIDENT".equals(valueType)) && "FAILED".equals(intent)) {
+        incidentFlag = 1;
+        log.info("Incident detected (FAILED), setting flag=1 for key={}", eventRecord.getKey());
+    } else if ("INCIDENT".equals(valueType) && "RESOLVED".equals(intent)) {
+        incidentFlag = 0;
+        log.info("Incident resolved (RESOLVED), setting flag=0 for key={}", eventRecord.getKey());
+    } else {
+        log.debug("No incident update needed for key={} (intent={}, valueType={})", 
+                  eventRecord.getKey(), intent, valueType);
     }
 
-    // Validate process instance for required fields
-    private boolean isValidProcessInstance(ProcessInstanceRecordValue processInstance) {
-        return processInstance.getBpmnProcessId() != null
-                && !processInstance.getBpmnProcessId().isEmpty()
-                && processInstance.getVersion() >= 0;
+    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        int i = 1;
+
+        // INSERT clause values
+        stmt.setLong(i++, eventRecord.getKey());
+        stmt.setString(i++, processInstance.getBpmnProcessId());
+        stmt.setInt(i++, processInstance.getVersion());
+        stmt.setLong(i++, processInstance.getProcessDefinitionKey());
+        stmt.setLong(i++, processInstance.getProcessInstanceKey());
+        stmt.setString(i++, processInstance.getElementId());
+        stmt.setLong(i++, processInstance.getFlowScopeKey());
+        stmt.setString(i++, String.valueOf(processInstance.getBpmnElementType()));
+        stmt.setString(i++, String.valueOf(processInstance.getBpmnEventType()));
+        stmt.setLong(i++, processInstance.getParentProcessInstanceKey());
+        stmt.setLong(i++, processInstance.getParentElementInstanceKey());
+        stmt.setInt(i++, incidentFlag);
+        stmt.setString(i++, processInstance.getTenantId());
+
+        // UPDATE clause values
+        stmt.setString(i++, processInstance.getBpmnProcessId());
+        stmt.setInt(i++, processInstance.getVersion());
+        stmt.setLong(i++, processInstance.getProcessDefinitionKey());
+        stmt.setLong(i++, processInstance.getProcessInstanceKey());
+        stmt.setString(i++, processInstance.getElementId());
+        stmt.setLong(i++, processInstance.getFlowScopeKey());
+        stmt.setString(i++, String.valueOf(processInstance.getBpmnElementType()));
+        stmt.setString(i++, String.valueOf(processInstance.getBpmnEventType()));
+        stmt.setLong(i++, processInstance.getParentProcessInstanceKey());
+        stmt.setLong(i++, processInstance.getParentElementInstanceKey());
+        stmt.setInt(i++, incidentFlag);
+        stmt.setString(i++, processInstance.getTenantId());
+
+        int rowsAffected = stmt.executeUpdate();
+        if (rowsAffected > 0) {
+            log.info("SQL executed successfully for record key={}", eventRecord.getKey());
+        } else {
+            log.warn("No rows affected for record key={}", eventRecord.getKey());
+        }
+
+    } catch (SQLException e) {
+        log.error("SQL error while handling process audit for record key=" + eventRecord.getKey(), e);
     }
 }
