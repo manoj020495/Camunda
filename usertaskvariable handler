@@ -1,71 +1,90 @@
-public void handleProcessAudit(Connection connection, Record<?> eventRecord, ProcessInstanceRecordValue processInstance) {
-    final String sql = "INSERT INTO CAMUNDA_PROCESS_AUDIT (RECORD_KEY, BPMN_PROCESS_ID, VERSION, PROCESS_DEFINITION_KEY, "
-                     + "PROCESS_INSTANCE_KEY, ELEMENT_ID, FLOW_SCOPE_KEY, BPMN_ELEMENT_TYPE, BPMN_EVENT_TYPE, "
-                     + "PARENT_PROCESS_INSTANCE_KEY, PARENT_ELEMENT_INSTANCE_KEY, INCIDENT_OCCURRED, TENANT_ID) "
-                     + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-                     + "ON CONFLICT (RECORD_KEY) DO UPDATE SET "
-                     + "BPMN_PROCESS_ID=?, VERSION=?, PROCESS_DEFINITION_KEY=?, PROCESS_INSTANCE_KEY=?, ELEMENT_ID=?, "
-                     + "FLOW_SCOPE_KEY=?, BPMN_ELEMENT_TYPE=?, BPMN_EVENT_TYPE=?, "
-                     + "PARENT_PROCESS_INSTANCE_KEY=?, PARENT_ELEMENT_INSTANCE_KEY=?, INCIDENT_OCCURRED=?, TENANT_ID=?";
+package com.bam1.bacf.exporter.handler;
 
-    int incidentFlag = 0;
-    String intent = eventRecord.getIntent().name();
-    String valueType = eventRecord.getValueType().name();
+import com.bam1.bacf.exporter.exception.GlobalExceptionHandler.DatabaseConnectionException;
+import io.camunda.zeebe.protocol.record.Record;
+import io.camunda.zeebe.protocol.record.value.IncidentRecordValue;
+import lombok.extern.slf4j.Slf4j;
 
-    log.info("Processing record key={} with intent={} and valueType={}", eventRecord.getKey(), intent, valueType);
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
-    // Incident logic: only applicable for JOB or INCIDENT value types
-    if (("JOB".equals(valueType) || "INCIDENT".equals(valueType)) && "FAILED".equals(intent)) {
-        incidentFlag = 1;
-        log.info("Incident detected (FAILED), setting flag=1 for key={}", eventRecord.getKey());
-    } else if ("INCIDENT".equals(valueType) && "RESOLVED".equals(intent)) {
-        incidentFlag = 0;
-        log.info("Incident resolved (RESOLVED), setting flag=0 for key={}", eventRecord.getKey());
-    } else {
-        log.debug("No incident update needed for key={} (intent={}, valueType={})", 
-                  eventRecord.getKey(), intent, valueType);
-    }
+@Slf4j
+public class IncidentHandler {
 
-    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-        int i = 1;
+    public void handleIncident(Connection connection, Record<?> eventRecord, IncidentRecordValue incidentValue) {
+        log.debug("IncidentHandler: eventRecord = {}, incidentValue = {}", eventRecord, incidentValue);
 
-        // INSERT clause values
-        stmt.setLong(i++, eventRecord.getKey());
-        stmt.setString(i++, processInstance.getBpmnProcessId());
-        stmt.setInt(i++, processInstance.getVersion());
-        stmt.setLong(i++, processInstance.getProcessDefinitionKey());
-        stmt.setLong(i++, processInstance.getProcessInstanceKey());
-        stmt.setString(i++, processInstance.getElementId());
-        stmt.setLong(i++, processInstance.getFlowScopeKey());
-        stmt.setString(i++, String.valueOf(processInstance.getBpmnElementType()));
-        stmt.setString(i++, String.valueOf(processInstance.getBpmnEventType()));
-        stmt.setLong(i++, processInstance.getParentProcessInstanceKey());
-        stmt.setLong(i++, processInstance.getParentElementInstanceKey());
-        stmt.setInt(i++, incidentFlag);
-        stmt.setString(i++, processInstance.getTenantId());
+        String sql = """
+            MERGE INTO CAMUNDA_INCIDENT t
+            USING (SELECT ? AS RECORD_KEY FROM dual) s
+            ON (t.RECORD_KEY = s.RECORD_KEY)
+            WHEN MATCHED THEN UPDATE SET
+                PROCESS_INSTANCE_KEY = ?,
+                PROCESS_DEFINITION_KEY = ?,
+                BPMN_PROCESS_ID = ?,
+                ELEMENT_ID = ?,
+                INCIDENT_STATUS = ?,
+                INCIDENT_FLAG = ?,
+                ERROR_TYPE = ?,
+                ERROR_MSG = ?,
+                TENANT_ID = ?
+            WHEN NOT MATCHED THEN INSERT (
+                RECORD_KEY, PROCESS_INSTANCE_KEY, PROCESS_DEFINITION_KEY, BPMN_PROCESS_ID,
+                ELEMENT_ID, INCIDENT_STATUS, INCIDENT_FLAG, ERROR_TYPE, ERROR_MSG, TENANT_ID
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """;
 
-        // UPDATE clause values
-        stmt.setString(i++, processInstance.getBpmnProcessId());
-        stmt.setInt(i++, processInstance.getVersion());
-        stmt.setLong(i++, processInstance.getProcessDefinitionKey());
-        stmt.setLong(i++, processInstance.getProcessInstanceKey());
-        stmt.setString(i++, processInstance.getElementId());
-        stmt.setLong(i++, processInstance.getFlowScopeKey());
-        stmt.setString(i++, String.valueOf(processInstance.getBpmnElementType()));
-        stmt.setString(i++, String.valueOf(processInstance.getBpmnEventType()));
-        stmt.setLong(i++, processInstance.getParentProcessInstanceKey());
-        stmt.setLong(i++, processInstance.getParentElementInstanceKey());
-        stmt.setInt(i++, incidentFlag);
-        stmt.setString(i++, processInstance.getTenantId());
+        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+            int i = 1;
 
-        int rowsAffected = stmt.executeUpdate();
-        if (rowsAffected > 0) {
-            log.info("SQL executed successfully for record key={}", eventRecord.getKey());
-        } else {
-            log.warn("No rows affected for record key={}", eventRecord.getKey());
+            // USING clause
+            stmt.setLong(i++, eventRecord.getKey());
+
+            // UPDATE SET clause
+            stmt.setLong(i++, incidentValue.getProcessInstanceKey());
+            stmt.setLong(i++, incidentValue.getProcessDefinitionKey());
+            stmt.setString(i++, incidentValue.getBpmnProcessId());
+            stmt.setString(i++, incidentValue.getElementId());
+            stmt.setString(i++, eventRecord.getIntent().name()); // CREATED or RESOLVED
+            stmt.setInt(i++, eventRecord.getIntent().name().equals("CREATED") ? 1 : 0);
+            stmt.setString(i++, incidentValue.getErrorType() != null ? incidentValue.getErrorType().name() : null);
+            stmt.setString(i++, incidentValue.getErrorMessage());
+            stmt.setString(i++, eventRecord.getTenantId());
+
+            // INSERT VALUES clause
+            stmt.setLong(i++, eventRecord.getKey());
+            stmt.setLong(i++, incidentValue.getProcessInstanceKey());
+            stmt.setLong(i++, incidentValue.getProcessDefinitionKey());
+            stmt.setString(i++, incidentValue.getBpmnProcessId());
+            stmt.setString(i++, incidentValue.getElementId());
+            stmt.setString(i++, eventRecord.getIntent().name());
+            stmt.setInt(i++, eventRecord.getIntent().name().equals("CREATED") ? 1 : 0);
+            stmt.setString(i++, incidentValue.getErrorType() != null ? incidentValue.getErrorType().name() : null);
+            stmt.setString(i++, incidentValue.getErrorMessage());
+            stmt.setString(i++, eventRecord.getTenantId());
+
+            int rowsAffected = stmt.executeUpdate();
+            if (rowsAffected > 0) {
+                log.info("IncidentHandler: SQL executed successfully for record key {}", eventRecord.getKey());
+            }
+
+        } catch (SQLException e) {
+            log.error("IncidentHandler: SQL execution failed for record key {}. Error = {}", eventRecord.getKey(), e.getMessage());
+            throw new DatabaseConnectionException("Database error in IncidentHandler for record key: " + eventRecord.getKey(), e);
         }
-
-    } catch (SQLException e) {
-        log.error("SQL error while handling process audit for record key=" + eventRecord.getKey(), e);
     }
 }
+
+CREATE TABLE CAMUNDA_INCIDENT (
+    RECORD_KEY NUMBER PRIMARY KEY,
+    PROCESS_INSTANCE_KEY NUMBER NOT NULL,
+    PROCESS_DEFINITION_KEY NUMBER NOT NULL,
+    BPMN_PROCESS_ID VARCHAR2(255),
+    ELEMENT_ID VARCHAR2(255),
+    INCIDENT_STATUS VARCHAR2(50),
+    INCIDENT_FLAG NUMBER,
+    ERROR_TYPE VARCHAR2(255),
+    ERROR_MSG CLOB,
+    TENANT_ID VARCHAR2(255)
+);
