@@ -1,75 +1,83 @@
-String sql = """
-MERGE INTO USER_TASK_RECORD t
-USING (SELECT ? AS ID FROM dual) s
-ON (t.ID = s.ID)
-WHEN MATCHED THEN
-  UPDATE SET
-    ELEMENT_ID = ?, NAME = ?, PROCESS_DEFINITION_ID = ?, CREATION_DATE = ?, 
-    COMPLETION_DATE = ?, STATE = ?, ASSIGNEE = ?, FORM_KEY = ?, 
-    PROCESS_DEFINITION_KEY = ?, ELEMENT_INSTANCE_KEY = ?, TENANT_ID = ?, 
-    DUE_DATE = ?, FOLLOW_UP_DATE = ?, CANDIDATE_GROUPS = ?, 
-    CANDIDATE_USERS = ?, EXTERNAL_FOR_REFERENCE = ?, PROCESS_DEFINITION_VERSION = ?, 
-    CUSTOM_HEADERS = ?, PRIORITY = ?, PARTITION_ID = ?
-WHEN NOT MATCHED THEN
-  INSERT (
-    ID, ELEMENT_ID, NAME, PROCESS_DEFINITION_ID, CREATION_DATE, COMPLETION_DATE, STATE, 
-    ASSIGNEE, FORM_KEY, PROCESS_DEFINITION_KEY, ELEMENT_INSTANCE_KEY, TENANT_ID, 
-    DUE_DATE, FOLLOW_UP_DATE, CANDIDATE_GROUPS, CANDIDATE_USERS, EXTERNAL_FOR_REFERENCE, 
-    PROCESS_DEFINITION_VERSION, CUSTOM_HEADERS, PRIORITY, PARTITION_ID
-  )
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-""";
+public void handleIncident(Connection connection, Record<?> eventRecord, IncidentRecordValue incidentValue) {
+    log.info("IncidentHandler: eventRecord = {}, incidentValue = {}", eventRecord, incidentValue);
 
-PreparedStatement stmt = connection.prepareStatement(sql);
+    String sql = """
+        MERGE INTO CAMUNDA_INCIDENT t
+        USING (SELECT ? AS PROCESS_INSTANCE_KEY, ? AS ELEMENT_ID FROM dual) s
+        ON (t.PROCESS_INSTANCE_KEY = s.PROCESS_INSTANCE_KEY AND t.ELEMENT_ID = s.ELEMENT_ID)
+        WHEN MATCHED THEN UPDATE SET
+            INCIDENT_STATUS = ?,
+            INCIDENT_FLAG = ?,
+            ERROR_TYPE = ?,
+            ERROR_MSG = ?,
+            RESOLUTION_DATE = ?
+        WHEN NOT MATCHED THEN INSERT (
+            RECORD_KEY, PROCESS_INSTANCE_KEY, PROCESS_DEFINITION_KEY, BPMN_PROCESS_ID,
+            ELEMENT_ID, INCIDENT_STATUS, INCIDENT_FLAG, ERROR_TYPE, ERROR_MSG,
+            CREATION_DATE, RESOLUTION_DATE
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """;
 
-int i = 1;
+    try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        int i = 1;
+        String intent = eventRecord.getIntent().name();
+        int incidentFlag = "CREATED".equals(intent) ? 1 : 0;
+        Timestamp now = Timestamp.from(Instant.now());
 
-// USING clause
-stmt.setLong(i++, userTask.getKey());
+        Timestamp creationDate = "CREATED".equals(intent) ? now : null;
+        Timestamp resolutionDate = "RESOLVED".equals(intent) ? now : null;
 
-// UPDATE SET clause
-stmt.setString(i++, userTask.getElementId());
-stmt.setString(i++, userTask.getName());
-stmt.setString(i++, userTask.getProcessDefinitionId());
-stmt.setTimestamp(i++, new Timestamp(record.getTimestamp()));
-stmt.setTimestamp(i++, "COMPLETED".equals(record.getIntent().name()) ? new Timestamp(record.getTimestamp()) : null);
-stmt.setString(i++, record.getIntent().name());
-stmt.setString(i++, userTask.getAssignee());
-stmt.setString(i++, userTask.getFormKey());
-stmt.setLong(i++, userTask.getProcessDefinitionKey());
-stmt.setLong(i++, userTask.getElementInstanceKey());
-stmt.setString(i++, userTask.getTenantId());
-stmt.setTimestamp(i++, null); // due_date
-stmt.setTimestamp(i++, null); // follow_up_date
-stmt.setString(i++, userTask.getCandidateGroupsList().toString());
-stmt.setString(i++, userTask.getCandidateUsersList().toString());
-stmt.setString(i++, userTask.getExternalFormReference());
-stmt.setInt(i++, userTask.getProcessDefinitionVersion());
-stmt.setString(i++, userTask.getCustomHeaders().toString());
-stmt.setInt(i++, userTask.getPriority());
-stmt.setInt(i++, record.getPartitionId());
+        // USING clause
+        stmt.setLong(i++, incidentValue.getProcessInstanceKey());
+        stmt.setString(i++, incidentValue.getElementId());
 
-// INSERT VALUES clause
-stmt.setLong(i++, userTask.getKey());
-stmt.setString(i++, userTask.getElementId());
-stmt.setString(i++, userTask.getName());
-stmt.setString(i++, userTask.getProcessDefinitionId());
-stmt.setTimestamp(i++, new Timestamp(record.getTimestamp()));
-stmt.setTimestamp(i++, "COMPLETED".equals(record.getIntent().name()) ? new Timestamp(record.getTimestamp()) : null);
-stmt.setString(i++, record.getIntent().name());
-stmt.setString(i++, userTask.getAssignee());
-stmt.setString(i++, userTask.getFormKey());
-stmt.setLong(i++, userTask.getProcessDefinitionKey());
-stmt.setLong(i++, userTask.getElementInstanceKey());
-stmt.setString(i++, userTask.getTenantId());
-stmt.setTimestamp(i++, null); // due_date
-stmt.setTimestamp(i++, null); // follow_up_date
-stmt.setString(i++, userTask.getCandidateGroupsList().toString());
-stmt.setString(i++, userTask.getCandidateUsersList().toString());
-stmt.setString(i++, userTask.getExternalFormReference());
-stmt.setInt(i++, userTask.getProcessDefinitionVersion());
-stmt.setString(i++, userTask.getCustomHeaders().toString());
-stmt.setInt(i++, userTask.getPriority());
-stmt.setInt(i++, record.getPartitionId());
+        // UPDATE clause
+        stmt.setString(i++, intent);
+        stmt.setInt(i++, incidentFlag);
+        stmt.setString(i++, incidentValue.getErrorType() != null ? incidentValue.getErrorType().name() : null);
+        stmt.setString(i++, incidentValue.getErrorMessage());
+        stmt.setTimestamp(i++, resolutionDate);
 
-stmt.executeUpdate();
+        // INSERT clause
+        stmt.setLong(i++, eventRecord.getKey()); // RECORD_KEY
+        stmt.setLong(i++, incidentValue.getProcessInstanceKey());
+        stmt.setLong(i++, incidentValue.getProcessDefinitionKey());
+        stmt.setString(i++, incidentValue.getBpmnProcessId());
+        stmt.setString(i++, incidentValue.getElementId());
+        stmt.setString(i++, intent);
+        stmt.setInt(i++, incidentFlag);
+        stmt.setString(i++, incidentValue.getErrorType() != null ? incidentValue.getErrorType().name() : null);
+        stmt.setString(i++, incidentValue.getErrorMessage());
+        stmt.setTimestamp(i++, creationDate);
+        stmt.setTimestamp(i++, resolutionDate);
+
+        int rowsAffected = stmt.executeUpdate();
+        if (rowsAffected > 0) {
+            log.info("IncidentHandler: SQL executed successfully for processInstanceKey {}, elementId {}",
+                    incidentValue.getProcessInstanceKey(), incidentValue.getElementId());
+        }
+
+    } catch (SQLException e) {
+        log.error("IncidentHandler: SQL execution failed for processInstanceKey {}, elementId {}. Error = {}",
+                incidentValue.getProcessInstanceKey(), incidentValue.getElementId(), e.getMessage());
+        throw new GlobalExceptionHandler.DatabaseConnectionException(
+                "Database error in IncidentHandler for processInstanceKey = "
+                        + incidentValue.getProcessInstanceKey() + ", elementId = " + incidentValue.getElementId(), e);
+    }
+}
+
+
+CREATE TABLE CAMUNDA_INCIDENT (
+    RECORD_KEY NUMBER NOT NULL,
+    PROCESS_INSTANCE_KEY NUMBER NOT NULL,
+    PROCESS_DEFINITION_KEY NUMBER NOT NULL,
+    BPMN_PROCESS_ID VARCHAR2(255) NOT NULL,
+    ELEMENT_ID VARCHAR2(255) NOT NULL,
+    INCIDENT_STATUS VARCHAR2(50) NOT NULL,
+    INCIDENT_FLAG NUMBER NOT NULL,
+    ERROR_TYPE VARCHAR2(255),
+    ERROR_MSG CLOB,
+    CREATION_DATE TIMESTAMP WITH TIME ZONE,
+    RESOLUTION_DATE TIMESTAMP WITH TIME ZONE,
+    PRIMARY KEY (PROCESS_INSTANCE_KEY, ELEMENT_ID)
+);
