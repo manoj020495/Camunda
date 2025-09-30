@@ -1,90 +1,62 @@
-package com.bam1.bacf.exporter.handler;
+public void handleUserTaskVariable(Connection connection,
+Record<?> eventRecord,
+VariableRecordValue variableRecord) throws SQLException {
+long scopeKey = variableRecord.getScopeKey();
+long processInstanceKey = variableRecord.getProcessInstanceKey();
 
-import com.bam1.bacf.exporter.exception.GlobalExceptionHandler.DatabaseConnectionException;
-import io.camunda.zeebe.protocol.record.Record;
-import io.camunda.zeebe.protocol.record.value.IncidentRecordValue;
-import lombok.extern.slf4j.Slf4j;
-
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.SQLException;
-
-@Slf4j
-public class IncidentHandler {
-
-    public void handleIncident(Connection connection, Record<?> eventRecord, IncidentRecordValue incidentValue) {
-        log.debug("IncidentHandler: eventRecord = {}, incidentValue = {}", eventRecord, incidentValue);
-
-        String sql = """
-            MERGE INTO CAMUNDA_INCIDENT t
-            USING (SELECT ? AS RECORD_KEY FROM dual) s
-            ON (t.RECORD_KEY = s.RECORD_KEY)
-            WHEN MATCHED THEN UPDATE SET
-                PROCESS_INSTANCE_KEY = ?,
-                PROCESS_DEFINITION_KEY = ?,
-                BPMN_PROCESS_ID = ?,
-                ELEMENT_ID = ?,
-                INCIDENT_STATUS = ?,
-                INCIDENT_FLAG = ?,
-                ERROR_TYPE = ?,
-                ERROR_MSG = ?,
-                TENANT_ID = ?
-            WHEN NOT MATCHED THEN INSERT (
-                RECORD_KEY, PROCESS_INSTANCE_KEY, PROCESS_DEFINITION_KEY, BPMN_PROCESS_ID,
-                ELEMENT_ID, INCIDENT_STATUS, INCIDENT_FLAG, ERROR_TYPE, ERROR_MSG, TENANT_ID
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """;
-
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            int i = 1;
-
-            // USING clause
-            stmt.setLong(i++, eventRecord.getKey());
-
-            // UPDATE SET clause
-            stmt.setLong(i++, incidentValue.getProcessInstanceKey());
-            stmt.setLong(i++, incidentValue.getProcessDefinitionKey());
-            stmt.setString(i++, incidentValue.getBpmnProcessId());
-            stmt.setString(i++, incidentValue.getElementId());
-            stmt.setString(i++, eventRecord.getIntent().name()); // CREATED or RESOLVED
-            stmt.setInt(i++, eventRecord.getIntent().name().equals("CREATED") ? 1 : 0);
-            stmt.setString(i++, incidentValue.getErrorType() != null ? incidentValue.getErrorType().name() : null);
-            stmt.setString(i++, incidentValue.getErrorMessage());
-            stmt.setString(i++, eventRecord.getTenantId());
-
-            // INSERT VALUES clause
-            stmt.setLong(i++, eventRecord.getKey());
-            stmt.setLong(i++, incidentValue.getProcessInstanceKey());
-            stmt.setLong(i++, incidentValue.getProcessDefinitionKey());
-            stmt.setString(i++, incidentValue.getBpmnProcessId());
-            stmt.setString(i++, incidentValue.getElementId());
-            stmt.setString(i++, eventRecord.getIntent().name());
-            stmt.setInt(i++, eventRecord.getIntent().name().equals("CREATED") ? 1 : 0);
-            stmt.setString(i++, incidentValue.getErrorType() != null ? incidentValue.getErrorType().name() : null);
-            stmt.setString(i++, incidentValue.getErrorMessage());
-            stmt.setString(i++, eventRecord.getTenantId());
-
-            int rowsAffected = stmt.executeUpdate();
-            if (rowsAffected > 0) {
-                log.info("IncidentHandler: SQL executed successfully for record key {}", eventRecord.getKey());
-            }
-
-        } catch (SQLException e) {
-            log.error("IncidentHandler: SQL execution failed for record key {}. Error = {}", eventRecord.getKey(), e.getMessage());
-            throw new DatabaseConnectionException("Database error in IncidentHandler for record key: " + eventRecord.getKey(), e);
-        }
-    }
+// Only proceed if scopeKey exists in USER_TASK table (means it's a User Task variable)
+String sqlCheck = "SELECT 1 FROM CAMUNDA_USER_TASK WHERE USER_TASK_KEY = ?";
+try (PreparedStatement checkStmt = connection.prepareStatement(sqlCheck)) {
+checkStmt.setLong(1, scopeKey);
+try (ResultSet rs = checkStmt.executeQuery()) {
+if (!rs.next()) {
+log.debug("Skipping variable {} because scopeKey {} does not belong to a user task",
+variableRecord.getName(), scopeKey);
+return;
+}
+}
 }
 
-CREATE TABLE CAMUNDA_INCIDENT (
-    RECORD_KEY NUMBER PRIMARY KEY,
-    PROCESS_INSTANCE_KEY NUMBER NOT NULL,
-    PROCESS_DEFINITION_KEY NUMBER NOT NULL,
-    BPMN_PROCESS_ID VARCHAR2(255),
-    ELEMENT_ID VARCHAR2(255),
-    INCIDENT_STATUS VARCHAR2(50),
-    INCIDENT_FLAG NUMBER,
-    ERROR_TYPE VARCHAR2(255),
-    ERROR_MSG CLOB,
-    TENANT_ID VARCHAR2(255)
-);
+// Now safe to insert/update into USER_TASK_VARIABLE
+String sql = "MERGE INTO CAMUNDA_USER_TASK_VARIABLE t " +
+"USING (SELECT ? AS NAME, ? AS SCOPE_KEY, ? AS PROCESS_INSTANCE_KEY FROM dual) s " +
+"ON (t.NAME = s.NAME AND t.SCOPE_KEY = s.SCOPE_KEY AND t.PROCESS_INSTANCE_KEY = s.PROCESS_INSTANCE_KEY) " +
+"WHEN MATCHED THEN " +
+" UPDATE SET VALUE = ?, UPDATED_TSTAMP = ?, UPDATED_BY = ? " +
+"WHEN NOT MATCHED THEN " +
+" INSERT (NAME, VALUE, SCOPE_KEY, PROCESS_INSTANCE_KEY, PROCESS_DEFINITION_KEY, " +
+" BPMN_PROCESS_ID, TENANT_ID, CREATED_TSTAMP, UPDATED_TSTAMP, CREATED_BY, UPDATED_BY) " +
+" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+String systemUser = "SYSTEM";
+
+// USING clause
+stmt.setString(1, variableRecord.getName());
+stmt.setLong(2, scopeKey);
+stmt.setLong(3, processInstanceKey);
+
+// UPDATE SET
+stmt.setString(4, variableRecord.getValue().toString());
+stmt.setObject(5, now);
+stmt.setString(6, systemUser);
+
+// INSERT values
+stmt.setString(7, variableRecord.getName());
+stmt.setString(8, variableRecord.getValue().toString());
+stmt.setLong(9, scopeKey);
+stmt.setLong(10, processInstanceKey);
+stmt.setLong(11, variableRecord.getProcessDefinitionKey());
+stmt.setString(12, variableRecord.getBpmnProcessId());
+stmt.setString(13, variableRecord.getTenantId());
+stmt.setObject(14, now);
+stmt.setObject(15, now);
+stmt.setString(16, systemUser);
+stmt.setString(17, systemUser);
+
+int rows = stmt.executeUpdate();
+log.info("UserTaskVariableHandler: Upserted variable {} for scopeKey {} (rows={})",
+variableRecord.getName(), scopeKey, rows);
+}
+}
