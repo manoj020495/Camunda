@@ -1,62 +1,28 @@
-public void handleUserTaskVariable(Connection connection,
-Record<?> eventRecord,
-VariableRecordValue variableRecord) throws SQLException {
-long scopeKey = variableRecord.getScopeKey();
-long processInstanceKey = variableRecord.getProcessInstanceKey();
+import org.kie.api.runtime.process.WorkItem;
+import org.kie.api.runtime.process.WorkItemHandler;
+import org.kie.api.runtime.process.WorkItemManager;
+import org.kie.internal.annotations.Wid;
 
-// Only proceed if scopeKey exists in USER_TASK table (means it's a User Task variable)
-String sqlCheck = "SELECT 1 FROM CAMUNDA_USER_TASK WHERE USER_TASK_KEY = ?";
-try (PreparedStatement checkStmt = connection.prepareStatement(sqlCheck)) {
-checkStmt.setLong(1, scopeKey);
-try (ResultSet rs = checkStmt.executeQuery()) {
-if (!rs.next()) {
-log.debug("Skipping variable {} because scopeKey {} does not belong to a user task",
-variableRecord.getName(), scopeKey);
-return;
+@Wid(name = "MyCustomTask", displayName = "My Custom Task", category = "Custom",
+parameters = {"inputParam: String"}, results = {"outputResult: String"})
+public class MyCustomWorkItemHandler implements WorkItemHandler {
+
+@Override
+public void executeWorkItem(WorkItem workItem, WorkItemManager manager) {
+String inputParam = (String) workItem.getParameter("inputParam");
+String outputResult = "Processed: " + inputParam;
+
+// Perform custom logic here
+System.out.println("Executing MyCustomTask with input: " + inputParam);
+
+java.util.Map<String, Object> results = new java.util.HashMap<>();
+results.put("outputResult", outputResult);
+manager.completeWorkItem(workItem.getId(), results);
 }
-}
-}
 
-// Now safe to insert/update into USER_TASK_VARIABLE
-String sql = "MERGE INTO CAMUNDA_USER_TASK_VARIABLE t " +
-"USING (SELECT ? AS NAME, ? AS SCOPE_KEY, ? AS PROCESS_INSTANCE_KEY FROM dual) s " +
-"ON (t.NAME = s.NAME AND t.SCOPE_KEY = s.SCOPE_KEY AND t.PROCESS_INSTANCE_KEY = s.PROCESS_INSTANCE_KEY) " +
-"WHEN MATCHED THEN " +
-" UPDATE SET VALUE = ?, UPDATED_TSTAMP = ?, UPDATED_BY = ? " +
-"WHEN NOT MATCHED THEN " +
-" INSERT (NAME, VALUE, SCOPE_KEY, PROCESS_INSTANCE_KEY, PROCESS_DEFINITION_KEY, " +
-" BPMN_PROCESS_ID, TENANT_ID, CREATED_TSTAMP, UPDATED_TSTAMP, CREATED_BY, UPDATED_BY) " +
-" VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
-try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
-String systemUser = "SYSTEM";
-
-// USING clause
-stmt.setString(1, variableRecord.getName());
-stmt.setLong(2, scopeKey);
-stmt.setLong(3, processInstanceKey);
-
-// UPDATE SET
-stmt.setString(4, variableRecord.getValue().toString());
-stmt.setObject(5, now);
-stmt.setString(6, systemUser);
-
-// INSERT values
-stmt.setString(7, variableRecord.getName());
-stmt.setString(8, variableRecord.getValue().toString());
-stmt.setLong(9, scopeKey);
-stmt.setLong(10, processInstanceKey);
-stmt.setLong(11, variableRecord.getProcessDefinitionKey());
-stmt.setString(12, variableRecord.getBpmnProcessId());
-stmt.setString(13, variableRecord.getTenantId());
-stmt.setObject(14, now);
-stmt.setObject(15, now);
-stmt.setString(16, systemUser);
-stmt.setString(17, systemUser);
-
-int rows = stmt.executeUpdate();
-log.info("UserTaskVariableHandler: Upserted variable {} for scopeKey {} (rows={})",
-variableRecord.getName(), scopeKey, rows);
+@Override
+public void abortWorkItem(WorkItem workItem, WorkItemManager manager) {
+System.out.println("Aborting MyCustomTask.");
+manager.abortWorkItem(workItem.getId());
 }
 }
