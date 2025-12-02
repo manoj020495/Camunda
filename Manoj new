@@ -1,0 +1,47 @@
+server:
+
+  port: 7071  # your Spring Boot app port
+
+
+
+camunda:
+
+  client:
+
+    # You are running Camunda yourself on K8s → self-managed
+
+    mode: self-managed
+
+
+
+    # ---- Connection to Zeebe Gateway (gRPC + REST) ----
+
+    # MUST be absolute URLs including scheme, per docs
+
+    # https://docs.camunda.io/docs/apis-tools/camunda-spring-boot-starter/properties-reference/
+
+    grpc-address: https://zeebegrpc.dev.c8.swft.apps.uscentral16.bofa.com:443
+
+    rest-address: https://zeebe.dev.c8.swft.apps.uscentral16.bofa.com:443
+
+
+
+    # If you want to prefer gRPC over REST (optional)
+
+    prefer-rest-over-grpc: false
+
+
+
+    # ---- OAuth via FedSSO ----
+
+    auth:
+
+      method: oidc
+
+      token-url: https://fedss0-dev.bankofamerica.com/as/token.oauth2
+
+      client-id: AIT_73201_M2M
+
+      client-secret: 3QrTuTFFCTLxlt8tLxT2J2Ca9HxPIP6BUYMsnLssVrw1glw5Eiudh0zKcN7NrjIK
+
+      audience: https://zeebe.dev.c8.swft.apps.uscentral16.bofa.com
