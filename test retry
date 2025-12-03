@@ -1,3 +1,16 @@
+package com.example.demo.controller;
+
+import io.camunda.zeebe.client.ZeebeClient;
+import io.camunda.zeebe.client.api.response.ActivatedJob;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.bind.annotation.*;
+
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
+
+@Slf4j
 @RestController
 @RequestMapping("/zeebe")
 public class RetryController {
@@ -8,73 +21,84 @@ public class RetryController {
         this.zeebeClient = zeebeClient;
     }
 
-    @PostMapping("/job/{jobKey}/retry")
-    public ResponseEntity<String> retryJob(@PathVariable long jobKey,
-                                           @RequestParam(defaultValue = "3") int retries) {
+    // --------------------------------------------
+    // MAIN API: RETRY INCIDENT (NOT JOB)
+    // --------------------------------------------
+    @PostMapping("/incident/{incidentId}/retry")
+    public Map<String, Object> retryIncident(
+            @PathVariable long incidentId,
+            @RequestParam(defaultValue = "3") int retries) {
+
+        Instant start = Instant.now();
+        Map<String, Object> response = new HashMap<>();
+
         try {
+            log.info("Received request to retry incident: {} with retries={}", incidentId, retries);
+
+            // Step 1 → find jobKey for the given incident
+            Long jobKey = findJobKeyForIncident(incidentId);
+
+            if (jobKey == null) {
+                response.put("success", false);
+                response.put("error", "No job found for incidentId=" + incidentId);
+                return response;
+            }
+
+            log.info("Mapped incident {} → jobKey {}", incidentId, jobKey);
+
+            // Step 2 → retry the job by updating retries
             zeebeClient
-                    .newSetJobRetriesCommand(jobKey)
+                    .newUpdateRetriesCommand(jobKey)
                     .retries(retries)
                     .send()
                     .join();
 
-            return ResponseEntity.ok("Retries updated to " + retries + " for job " + jobKey);
+            // Step 3 → report success
+            response.put("success", true);
+            response.put("message", "Incident " + incidentId +
+                    " retried successfully by updating job " + jobKey +
+                    " with retries=" + retries);
+
+            log.info("Retry successful. Time taken={} ms",
+                    Duration.between(start, Instant.now()).toMillis());
+
+            return response;
 
         } catch (Exception ex) {
-            return ResponseEntity
-                    .status(500)
-                    .body("Retry failed: " + ex.getMessage());
+
+            log.error("Retry failed for incident {} : {}", incidentId, ex.getMessage());
+
+            response.put("success", false);
+            response.put("error", ex.getMessage());
+            return response;
         }
     }
-}
 
 
-@PostMapping("/incident/{jobKey}/resolve")
-public ResponseEntity<String> resolveIncident(@PathVariable long jobKey) {
-    try {
-        zeebeClient
-                .newSetJobRetriesCommand(jobKey)
-                .retries(1) // give one retry
-                .send()
-                .join();
+    // -------------------------------------------------------------
+    // HELPER METHOD: FIND JOB FOR INCIDENT
+    // This scans all active jobs (Zeebe API) and finds the one
+    // whose incidentKey matches the given incidentId.
+    // -------------------------------------------------------------
+    private Long findJobKeyForIncident(long incidentId) {
 
-        return ResponseEntity.ok("Incident resolved for job " + jobKey);
+        log.info("Searching for job with incidentId={}", incidentId);
 
-    } catch (Exception ex) {
-        return ResponseEntity.status(500).body("Failed: " + ex.getMessage());
-    }
-}
-
-@PostMapping("/process/{instanceKey}/retry")
-public ResponseEntity<String> retryProcessInstance(@PathVariable long instanceKey) {
-
-    try {
-        var activated = zeebeClient
+        var jobResponse = zeebeClient
                 .newActivateJobsCommand()
-                .jobType("service-task")   // or "*"
-                .maxJobsToActivate(50)
+                .jobType("*")                    // activate ANY job type
+                .maxJobsToActivate(200)          // activate up to 200 jobs
                 .send()
                 .join();
 
-        int retried = 0;
-
-        for (var job : activated.getJobs()) {
-            if (job.getProcessInstanceKey() == instanceKey &&
-                job.getRetries() == 0) {
-
-                zeebeClient
-                    .newSetJobRetriesCommand(job.getKey())
-                    .retries(3)
-                    .send()
-                    .join();
-
-                retried++;
+        for (ActivatedJob job : jobResponse.getJobs()) {
+            if (job.getIncidentKey() == incidentId) {
+                log.info("Found jobKey={} for incidentId={}", job.getKey(), incidentId);
+                return job.getKey();
             }
         }
 
-        return ResponseEntity.ok("Retried " + retried + " failed jobs for instance " + instanceKey);
-
-    } catch (Exception ex) {
-        return ResponseEntity.status(500).body("Retry failed: " + ex.getMessage());
+        log.warn("No job found with incidentId={}", incidentId);
+        return null;
     }
 }
