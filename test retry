@@ -1,0 +1,80 @@
+@RestController
+@RequestMapping("/zeebe")
+public class RetryController {
+
+    private final ZeebeClient zeebeClient;
+
+    public RetryController(ZeebeClient zeebeClient) {
+        this.zeebeClient = zeebeClient;
+    }
+
+    @PostMapping("/job/{jobKey}/retry")
+    public ResponseEntity<String> retryJob(@PathVariable long jobKey,
+                                           @RequestParam(defaultValue = "3") int retries) {
+        try {
+            zeebeClient
+                    .newSetJobRetriesCommand(jobKey)
+                    .retries(retries)
+                    .send()
+                    .join();
+
+            return ResponseEntity.ok("Retries updated to " + retries + " for job " + jobKey);
+
+        } catch (Exception ex) {
+            return ResponseEntity
+                    .status(500)
+                    .body("Retry failed: " + ex.getMessage());
+        }
+    }
+}
+
+
+@PostMapping("/incident/{jobKey}/resolve")
+public ResponseEntity<String> resolveIncident(@PathVariable long jobKey) {
+    try {
+        zeebeClient
+                .newSetJobRetriesCommand(jobKey)
+                .retries(1) // give one retry
+                .send()
+                .join();
+
+        return ResponseEntity.ok("Incident resolved for job " + jobKey);
+
+    } catch (Exception ex) {
+        return ResponseEntity.status(500).body("Failed: " + ex.getMessage());
+    }
+}
+
+@PostMapping("/process/{instanceKey}/retry")
+public ResponseEntity<String> retryProcessInstance(@PathVariable long instanceKey) {
+
+    try {
+        var activated = zeebeClient
+                .newActivateJobsCommand()
+                .jobType("service-task")   // or "*"
+                .maxJobsToActivate(50)
+                .send()
+                .join();
+
+        int retried = 0;
+
+        for (var job : activated.getJobs()) {
+            if (job.getProcessInstanceKey() == instanceKey &&
+                job.getRetries() == 0) {
+
+                zeebeClient
+                    .newSetJobRetriesCommand(job.getKey())
+                    .retries(3)
+                    .send()
+                    .join();
+
+                retried++;
+            }
+        }
+
+        return ResponseEntity.ok("Retried " + retried + " failed jobs for instance " + instanceKey);
+
+    } catch (Exception ex) {
+        return ResponseEntity.status(500).body("Retry failed: " + ex.getMessage());
+    }
+}
