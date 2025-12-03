@@ -1,0 +1,61 @@
+@PostMapping("/process/{processInstanceKey}/retry")
+public Map<String, Object> retryProcessInstance(
+        @PathVariable long processInstanceKey,
+        @RequestParam(defaultValue = "3") int retries) {
+
+    Map<String, Object> response = new HashMap<>();
+    List<String> messages = new ArrayList<>();
+    List<String> errors = new ArrayList<>();
+
+    try {
+        // STEP 1: Fetch all incidents for this instance
+        String sql = "SELECT RECORD_KEY, JOB_KEY FROM CAMUNDA_INCIDENT " +
+                     "WHERE PROCESS_INSTANCE_KEY = ? AND INCIDENT_STATUS = 'CREATED'";
+
+        List<Map<String, Object>> incidents = jdbcTemplate.queryForList(sql, processInstanceKey);
+
+        if (incidents.isEmpty()) {
+            response.put("success", false);
+            response.put("error", "No active incidents for processInstanceKey=" + processInstanceKey);
+            return response;
+        }
+
+        // STEP 2: Loop through all incidents & retry each
+        for (Map<String, Object> row : incidents) {
+
+            long incidentKey = ((Number) row.get("RECORD_KEY")).longValue();
+            long jobKey = ((Number) row.get("JOB_KEY")).longValue();
+
+            try {
+                // Retry job
+                zeebeClient
+                        .newUpdateRetriesCommand(jobKey)
+                        .retries(retries)
+                        .send()
+                        .join();
+
+                // Resolve incident
+                zeebeClient
+                        .newResolveIncidentCommand(incidentKey)
+                        .send()
+                        .join();
+
+                messages.add("Retried incident=" + incidentKey + " jobKey=" + jobKey);
+
+            } catch (Exception ex) {
+                errors.add("Failed incident=" + incidentKey + ": " + ex.getMessage());
+            }
+        }
+
+        // STEP 3: Build final response
+        response.put("success", errors.isEmpty());
+        response.put("messages", messages);
+        response.put("errors", errors);
+        return response;
+
+    } catch (Exception ex) {
+        response.put("success", false);
+        response.put("error", ex.getMessage());
+        return response;
+    }
+}
